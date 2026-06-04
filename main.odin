@@ -12,13 +12,41 @@ Shader_Vertex :: struct {
 
 Shader_Index :: u32
 
-mkGrid :: proc($ty : typeid, row, col : int) -> (result : [][]ty) {
-    result = make([][]ty, row)
-    for &v, i in result {
-        v = make([]ty, col)
-    }
+Shader_Instance :: struct {
+    model : matrix[4, 4]f32,
+    col : [4]f32,
+    a : [4]f32,
+}
 
-    return
+Tile :: struct {
+    opened : bool,
+}
+
+Grid :: struct($ty : typeid) {
+    cols : int,
+    rows : int,
+    vals : []ty,
+}
+
+grid_make :: proc($ty : typeid, cols, rows : int) -> Grid(ty) {
+    return {
+        rows, cols, make([]ty, rows * cols)
+    }
+}
+
+grid_get :: proc(grid : Grid($ty), col, row : int) -> (val : ty, ok : bool = false) {
+    if row < 0 || col < 0 { return }
+    if row >= grid.rows || col >= grid.cols { return }
+
+    return grid.vals[row * grid.cols + col], true
+}
+
+grid_set :: proc(grid : Grid($ty), col, row : int, val : ty) -> (ok : bool = false) {
+    if row < 0 || col < 0 { return }
+    if row >= grid.rows || col >= grid.cols { return }
+
+    grid.vals[row * grid.cols + col] = val
+    return true
 }
 
 main :: proc () {
@@ -101,6 +129,38 @@ main :: proc () {
 
 
 
+    buffer_instances : u32
+    gl.GenBuffers(1, &buffer_instances)
+    defer gl.DeleteBuffers(1, &buffer_instances)
+
+
+
+    ms_grid := grid_make(Tile, 3, 3)
+    instances := grid_make(Shader_Instance, 3, 3)
+
+    grid_set(ms_grid, 1, 1, Tile{ true })
+
+    for y in 0..<ms_grid.rows {
+        for x in 0..<ms_grid.cols {
+            ms, _ := grid_get(ms_grid, x, y)
+            instance : Shader_Instance = {
+                model = linalg.matrix4_translate_f32({ 0.0 + cast(f32)x, 0.0 + cast(f32)y, 0.0 }),
+                col = ms.opened ? { 1, 1, 1, 1 } : { 0, 0, 0, 1 }
+            }
+
+            grid_set(instances, x, y, instance)
+        }
+    }
+
+
+
+    gl.BindBuffer(gl.SHADER_STORAGE_BUFFER, buffer_instances)
+    gl.NamedBufferData(buffer_instances, size_of(Shader_Instance) * len(instances.vals), raw_data(instances.vals), gl.STATIC_DRAW)
+
+
+    fmt.println(align_of(Shader_Instance), size_of(Shader_Instance))
+
+
 
     for !glfw.WindowShouldClose(window) {
         glfw.PollEvents()
@@ -116,21 +176,18 @@ main :: proc () {
 
 
         // NOTE: this is completely unnecessary, but it doesn't matter at all
-
-        // matrix_model := linalg.matrix4_translate_f32({ 0.0, 0.0, 1.0 } * math.sin(time_passed)) * linalg.matrix4_rotate_f32(time_passed, { 1.0, 1.0, 1.0 })
-        matrix_model := linalg.MATRIX4F32_IDENTITY
         matrix_view  := linalg.matrix4_look_at_f32({ 0.0, 0.0, 5.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 })
         matrix_proj := linalg.matrix_ortho3d_f32(-4, 4, -3, 3, 0.1, 100)
 
         gl.Uniform1f(0, 0)
-        gl.UniformMatrix4fv(1, 1, gl.FALSE, cast(^f32)&matrix_model)
         gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_view)
         gl.UniformMatrix4fv(3, 1, gl.FALSE, cast(^f32)&matrix_proj)
 
 
 
         gl.BindVertexArray(array_vertex)
-        gl.DrawElements(gl.TRIANGLES, cast(i32)len(indexes), gl.UNSIGNED_INT, nil)
+        gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, buffer_instances)
+        gl.DrawElementsInstanced(gl.TRIANGLES, cast(i32)len(indexes), gl.UNSIGNED_INT, nil, cast(i32)len(instances.vals))
 
 
 
@@ -138,4 +195,3 @@ main :: proc () {
         glfw.SwapBuffers(window)
     }
 }
-
