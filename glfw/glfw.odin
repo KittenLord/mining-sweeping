@@ -194,6 +194,27 @@ CursorInputMode :: enum i32 {
     Disabled            = glfw.CURSOR_DISABLED,
 }
 
+
+
+
+
+// NOTE: never returns KeyAction.Repeat
+GetKey :: proc "c" (window : glfw.WindowHandle, key : Key) -> KeyAction {
+    return cast(KeyAction)glfw.GetKey(window, cast(i32)key)
+}
+
+IsKeyPressed :: proc "c" (window : glfw.WindowHandle, key : Key) -> bool {
+    return GetKey(window, key) == .Press
+}
+
+IsKeyPressed_f32 :: proc "c" (window : glfw.WindowHandle, key : Key) -> f32 {
+    return IsKeyPressed(window, key) ? 1 : 0
+}
+
+
+
+
+
 GetCursorPosf32 :: proc "c" (window : glfw.WindowHandle) -> [2]f32 {
     x, y := glfw.GetCursorPos(window)
     return { cast(f32)x, cast(f32)y }

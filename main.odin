@@ -83,13 +83,17 @@ updateLerps :: proc(grid : Grid(Tile), col, row : int) {
         offset := neighborOffset(tn)
         nn, ok := grid_get(grid, col + offset.x, row + offset.y)
 
-        fmt.println(ok, nn.opened)
-        
-        opened := nn.opened
+        opened : bool
+
+        if !ok {
+            opened = true
+        }
+        else {
+            opened = nn.opened
+        }
+
         present[tn] = !opened
     }
-
-    fmt.println(present)
 
     newLerpDeltas[.NW] = (!present[.WW] && !present[.NN]) ? 1 : -1
     newLerpDeltas[.NE] = (!present[.NN] && !present[.EE]) ? 1 : -1
@@ -234,8 +238,8 @@ main :: proc () {
 
 
 
-    ms_grid := grid_make(Tile, 3, 3)
-    instances := grid_make(Shader_Instance, 3, 3)
+    ms_grid := grid_make(Tile, 10, 10)
+    instances := grid_make(Shader_Instance, 10, 10)
 
     grid_set(ms_grid, 1, 1, Tile{ false, {} })
 
@@ -291,6 +295,10 @@ main :: proc () {
 
     fmt.println(align_of(Shader_Instance), size_of(Shader_Instance))
 
+    
+    position : [3]f32 = { 0, 0, 5 }
+    direction : [3]f32 = { 0, 0, -5 }
+
 
     time_start := time.now()
     time_last := time.now()
@@ -307,23 +315,37 @@ main :: proc () {
 
 
 
+
+        moveSpeed : f32 = 10
+
+        position += { 0,  1, 0 } * myglfw.IsKeyPressed_f32(window, .LetterW) * time_delta * moveSpeed
+        position += { 0, -1, 0 } * myglfw.IsKeyPressed_f32(window, .LetterS) * time_delta * moveSpeed
+
+        position += { -1, 0, 0 } * myglfw.IsKeyPressed_f32(window, .LetterA) * time_delta * moveSpeed
+        position += {  1, 0, 0 } * myglfw.IsKeyPressed_f32(window, .LetterD) * time_delta * moveSpeed
+
+
+
+
+
         // NOTE: this is completely unnecessary, but it doesn't matter at all
-        matrix_view  := linalg.matrix4_look_at_f32({ 0.0, 0.0, -5.0 }, { 0.0, 0.0, 0.0 }, { 0.0, -1.0, 0.0 })
+        matrix_view  := linalg.matrix4_look_at_f32(position, position + direction, { 0.0, 1.0, 0.0 })
         matrix_proj  := linalg.matrix_ortho3d_f32(-4, 4, -3, 3, 0.1, 100)
 
         if wdata.click_present {
             wdata.click_present = false
 
             v := wdata.click_pos
-            pos4 := linalg.matrix4_inverse(matrix_view) * [4]f32{ ilerp(0, screen.x, v.x) * 8 - 4, ilerp(0, screen.y, v.y) * 6 - 3, 0, 1 }
+            pos4 := linalg.matrix4_inverse(matrix_view) * [4]f32{ ilerp(0, screen.x, v.x) * 8 - 4, -(ilerp(0, screen.y, v.y) * 6 - 3), 0, 1 }
             pos := pos4.xy / pos4.w
-            pos.y = -pos.y // NOTE: not sure why this is needed
+            pos.y = pos.y
 
             fmt.println(v)
             fmt.println(pos)
 
             col := cast(int)math.round(pos.x)
             row := cast(int)math.round(pos.y)
+            // row = -row // NOTE: not sure why this is needed
 
             tile, ok := grid_ref(ms_grid, col, row)
             if ok {
@@ -366,7 +388,7 @@ main :: proc () {
 
         gl.Viewport(0, 0, cast(i32)screen.x, cast(i32)screen.y)
 
-        gl.ClearColor(0.1, 0.2, 0.4, 1.0)
+        gl.ClearColor(0.9, 0.9, 0.9, 1.0)
         gl.Clear(gl.COLOR_BUFFER_BIT)
 
 
