@@ -219,7 +219,7 @@ main :: proc () {
 
 
 
-    program, _ := gl.load_shaders_file("shaders/tile-vert.glsl", "shaders/tile-frag.glsl")
+    program, _ := gl.load_shaders_file("shaders-built/tile-vert.glsl", "shaders-built/tile-frag.glsl")
     defer gl.DeleteProgram(program)
 
 
@@ -311,7 +311,7 @@ main :: proc () {
             m, _ := grid_ref(ms_grid, x, y)
             m.minesAround = mines
 
-            fmt.println(mines)
+            // fmt.println(mines)
         }
     }
 
