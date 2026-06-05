@@ -14,12 +14,47 @@ Shader_Index :: u32
 
 Shader_Instance :: struct {
     model : matrix[4, 4]f32,
-    col : [4]f32,
-    a : [4]f32,
+
+    // TODO: i think we do an extra lerp for corners when they are inverted
+    lerp_NW : f32,
+    lerp_NN : f32,
+    lerp_NE : f32,
+    lerp_EE : f32,
+    lerp_SE : f32,
+    lerp_SS : f32,
+    lerp_SW : f32,
+    lerp_WW : f32,
+
+    opened : u32,
 }
 
 Tile :: struct {
     opened : bool,
+}
+
+TileNeighbor :: enum {
+    NW,
+    NN,
+    NE,
+    EE,
+    SE,
+    SS,
+    SW,
+    WW,
+}
+
+neighborOffset :: proc(n : TileNeighbor) -> [2]int {
+    switch n {
+    case .NW: return { -1, -1 }
+    case .NN: return {  0, -1 }
+    case .NE: return {  1, -1 }
+    case .EE: return {  1,  0 }
+    case .SE: return {  1,  1 }
+    case .SS: return {  0,  1 }
+    case .SW: return { -1,  1 }
+    case .WW: return { -1,  0 }
+    case: panic("bad")
+    }
 }
 
 Grid :: struct($ty : typeid) {
@@ -145,7 +180,20 @@ main :: proc () {
             ms, _ := grid_get(ms_grid, x, y)
             instance : Shader_Instance = {
                 model = linalg.matrix4_translate_f32({ 0.0 + cast(f32)x, 0.0 + cast(f32)y, 0.0 }),
-                col = ms.opened ? { 1, 1, 1, 1 } : { 0, 0, 0, 1 }
+
+
+                opened = ms.opened ? 1 : 0,
+            }
+
+            if(ms.opened) {
+                instance.lerp_NW = 1.0
+                instance.lerp_NN = 1.0
+                instance.lerp_NE = 1.0
+                instance.lerp_EE = 1.0
+                instance.lerp_SE = 1.0
+                instance.lerp_SS = 1.0
+                instance.lerp_SW = 1.0
+                instance.lerp_WW = 1.0
             }
 
             grid_set(instances, x, y, instance)
@@ -180,8 +228,10 @@ main :: proc () {
         matrix_proj := linalg.matrix_ortho3d_f32(-4, 4, -3, 3, 0.1, 100)
 
         gl.Uniform1f(0, 0)
-        gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_view)
-        gl.UniformMatrix4fv(3, 1, gl.FALSE, cast(^f32)&matrix_proj)
+        gl.UniformMatrix4fv(1, 1, gl.FALSE, cast(^f32)&matrix_view)
+        gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_proj)
+        gl.Uniform1f(3, 0.45)
+        gl.Uniform1f(4, 0.2)
 
 
 
