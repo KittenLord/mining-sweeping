@@ -12,11 +12,15 @@ struct Instance {
     float lerp_SS;
     float lerp_SW;
     float lerp_WW;
+    float lerp_NWI;
+    float lerp_NEI;
+    float lerp_SWI;
+    float lerp_SEI;
 
     uint opened;
 
     uint paddingA[1];
-    uint paddingB[6];
+    uint paddingB[2];
 };
 
 layout(binding = 0) buffer buffer_instances {
@@ -93,6 +97,17 @@ void main() {
     if(CHECK_RADIUS(S, E, 1, 1)) {
         discard;
     }
+
+#define CHECK_IRADIUS(a, b, as, bs) \
+    float iradius_##a##b = mix(0, (deco_size - deco_offset), instance.lerp_##a##b##I); \
+    if(dist2(vec2(as * deco_size, bs * deco_size), in_position.xy) < iradius_##a##b * iradius_##a##b) { \
+        discard; \
+    }
+
+    CHECK_IRADIUS(N, W, -1, -1);
+    CHECK_IRADIUS(N, E,  1, -1);
+    CHECK_IRADIUS(S, W, -1,  1);
+    CHECK_IRADIUS(S, E,  1,  1);
 
 
 

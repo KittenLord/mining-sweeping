@@ -34,6 +34,11 @@ Shader_Instance_Lerp :: enum {
     SS,
     SW,
     WW,
+
+    NWI,
+    NEI,
+    SWI,
+    SEI,
 }
 
 Tile :: struct {
@@ -95,6 +100,11 @@ updateLerps :: proc(grid : Grid(Tile), col, row : int) {
     newLerpDeltas[.EE] = !present[.EE] ? 1 : -1
     newLerpDeltas[.SS] = !present[.SS] ? 1 : -1
     newLerpDeltas[.WW] = !present[.WW] ? 1 : -1
+
+    newLerpDeltas[.NWI] = present[.WW] && present[.NN] && !present[.NW] ? 1 : -1
+    newLerpDeltas[.NEI] = present[.NN] && present[.EE] && !present[.NE] ? 1 : -1
+    newLerpDeltas[.SEI] = present[.EE] && present[.SS] && !present[.SE] ? 1 : -1
+    newLerpDeltas[.SWI] = present[.SS] && present[.WW] && !present[.SW] ? 1 : -1
 
     n.lerpDeltas = newLerpDeltas
     grid_set(grid, col, row, n)
@@ -366,7 +376,7 @@ main :: proc () {
         gl.Uniform1f(0, time_passed)
         gl.UniformMatrix4fv(1, 1, gl.FALSE, cast(^f32)&matrix_view)
         gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_proj)
-        gl.Uniform1f(3, 0.4)
+        gl.Uniform1f(3, 0.3)
         gl.Uniform1f(4, 0.3)
 
 

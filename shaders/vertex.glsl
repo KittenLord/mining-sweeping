@@ -12,11 +12,15 @@ struct Instance {
     float lerp_SS;
     float lerp_SW;
     float lerp_WW;
+    float lerp_NWI;
+    float lerp_NEI;
+    float lerp_SWI;
+    float lerp_SEI;
 
     uint opened;
 
     uint paddingA[1];
-    uint paddingB[6];
+    uint paddingB[2];
 };
 
 layout(binding = 0) buffer buffer_instances {
