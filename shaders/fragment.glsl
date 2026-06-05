@@ -44,7 +44,11 @@ float dist2(vec2 a, vec2 b) {
 
 void main() {
     Instance instance = instances[in_instanceId];
-    vec3 color = instance.opened == 1 ? vec3(0.9, 0.9, 0.9) : vec3(0.4, 0.4, 0.4);
+    
+    if(instance.opened == 1) {
+        out_color = vec4(0.9, 0.9, 0.9, 1.0);
+        return;
+    }
 
     float bound_NN = -mix(deco_size, deco_offset, instance.lerp_NN);
     float bound_SS =  mix(deco_size, deco_offset, instance.lerp_SS);
@@ -92,5 +96,5 @@ void main() {
 
 
 
-    out_color = vec4(color, 1.0);
+    out_color = vec4(0.4, 0.4, 0.4, 1.0);
 }

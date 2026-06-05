@@ -2,6 +2,10 @@ package main
 
 import "core:fmt"
 import "core:math/linalg"
+import "core:math"
+import "core:time"
+
+import myglfw "./glfw"
 
 import gl "vendor:OpenGL"
 import glfw "vendor:glfw"
@@ -15,21 +19,27 @@ Shader_Index :: u32
 Shader_Instance :: struct {
     model : matrix[4, 4]f32,
 
-    // TODO: i think we do an extra lerp for corners when they are inverted
-    lerp_NW : f32,
-    lerp_NN : f32,
-    lerp_NE : f32,
-    lerp_EE : f32,
-    lerp_SE : f32,
-    lerp_SS : f32,
-    lerp_SW : f32,
-    lerp_WW : f32,
+    lerps : [Shader_Instance_Lerp]f32,
 
     opened : u32,
 }
 
+// TODO: i think we do an extra lerp for corners when they are inverted
+Shader_Instance_Lerp :: enum {
+    NW,
+    NN,
+    NE,
+    EE,
+    SE,
+    SS,
+    SW,
+    WW,
+}
+
 Tile :: struct {
     opened : bool,
+
+    lerpDeltas : [Shader_Instance_Lerp]f32,
 }
 
 TileNeighbor :: enum {
@@ -57,6 +67,39 @@ neighborOffset :: proc(n : TileNeighbor) -> [2]int {
     }
 }
 
+updateLerps :: proc(grid : Grid(Tile), col, row : int) {
+    n, ok := grid_get(grid, col, row)
+    if !ok { return }
+
+    newLerpDeltas : [Shader_Instance_Lerp]f32
+
+    present : [TileNeighbor]bool
+    for tn in TileNeighbor {
+        offset := neighborOffset(tn)
+        nn, ok := grid_get(grid, col + offset.x, row + offset.y)
+
+        fmt.println(ok, nn.opened)
+        
+        opened := nn.opened
+        present[tn] = !opened
+    }
+
+    fmt.println(present)
+
+    newLerpDeltas[.NW] = (!present[.WW] && !present[.NN]) ? 1 : -1
+    newLerpDeltas[.NE] = (!present[.NN] && !present[.EE]) ? 1 : -1
+    newLerpDeltas[.SE] = (!present[.EE] && !present[.SS]) ? 1 : -1
+    newLerpDeltas[.SW] = (!present[.SS] && !present[.WW]) ? 1 : -1
+
+    newLerpDeltas[.NN] = !present[.NN] ? 1 : -1
+    newLerpDeltas[.EE] = !present[.EE] ? 1 : -1
+    newLerpDeltas[.SS] = !present[.SS] ? 1 : -1
+    newLerpDeltas[.WW] = !present[.WW] ? 1 : -1
+
+    n.lerpDeltas = newLerpDeltas
+    grid_set(grid, col, row, n)
+}
+
 Grid :: struct($ty : typeid) {
     cols : int,
     rows : int,
@@ -82,6 +125,17 @@ grid_set :: proc(grid : Grid($ty), col, row : int, val : ty) -> (ok : bool = fal
 
     grid.vals[row * grid.cols + col] = val
     return true
+}
+
+grid_ref :: proc(grid : Grid($ty), col, row : int) -> (ref : ^ty, ok : bool = false) {
+    if row < 0 || col < 0 { return }
+    if row >= grid.rows || col >= grid.cols { return }
+
+    return &grid.vals[row * grid.cols + col], true
+}
+
+ilerp :: proc(a, b, v : f32) -> f32 {
+    return (v - a) / (b - a)
 }
 
 main :: proc () {
@@ -173,32 +227,51 @@ main :: proc () {
     ms_grid := grid_make(Tile, 3, 3)
     instances := grid_make(Shader_Instance, 3, 3)
 
-    grid_set(ms_grid, 1, 1, Tile{ true })
+    grid_set(ms_grid, 1, 1, Tile{ false, {} })
 
     for y in 0..<ms_grid.rows {
         for x in 0..<ms_grid.cols {
             ms, _ := grid_get(ms_grid, x, y)
             instance : Shader_Instance = {
                 model = linalg.matrix4_translate_f32({ 0.0 + cast(f32)x, 0.0 + cast(f32)y, 0.0 }),
+                // model = linalg.MATRIX4F32_IDENTITY,
 
 
                 opened = ms.opened ? 1 : 0,
             }
 
             if(ms.opened) {
-                instance.lerp_NW = 1.0
-                instance.lerp_NN = 1.0
-                instance.lerp_NE = 1.0
-                instance.lerp_EE = 1.0
-                instance.lerp_SE = 1.0
-                instance.lerp_SS = 1.0
-                instance.lerp_SW = 1.0
-                instance.lerp_WW = 1.0
+                for &v in instance.lerps {
+                    v = 1
+                }
             }
 
             grid_set(instances, x, y, instance)
         }
     }
+
+
+    // TODO: we might want to have a small queue of inputs but i have no clue rn (and dont really care)
+    // alternatively we can handle the click in the event handler itself, but ehhhhhhh maybe
+    WindowData :: struct {
+        click_present : bool,
+        click_pos : [2]f32,
+    }
+
+    wdata : WindowData = {
+        click_present = false,
+    }
+
+    glfw.SetWindowUserPointer(window, &wdata)
+
+    myglfw.SetMouseButtonCallback(window, proc "c" (window : glfw.WindowHandle, button : myglfw.MouseButton, action : myglfw.Action, mods : myglfw.Mods) {
+        wdata := cast(^WindowData)glfw.GetWindowUserPointer(window)
+
+        if action != .Press { return }
+
+        wdata.click_present = true
+        wdata.click_pos = myglfw.GetCursorPosf32(window)
+    })
 
 
 
@@ -209,11 +282,79 @@ main :: proc () {
     fmt.println(align_of(Shader_Instance), size_of(Shader_Instance))
 
 
+    time_start := time.now()
+    time_last := time.now()
 
     for !glfw.WindowShouldClose(window) {
         glfw.PollEvents()
 
-        gl.Viewport(0, 0, 800, 600)
+        time_now := time.now()
+        time_passed := cast(f32)time.duration_seconds(time.diff(time_start, time_now))
+        time_delta := cast(f32)time.duration_seconds(time.diff(time_last, time_now))
+        defer time_last = time_now
+
+        screen := myglfw.GetWindowSize(window)
+
+
+
+        // NOTE: this is completely unnecessary, but it doesn't matter at all
+        matrix_view  := linalg.matrix4_look_at_f32({ 0.0, 0.0, -5.0 }, { 0.0, 0.0, 0.0 }, { 0.0, -1.0, 0.0 })
+        matrix_proj  := linalg.matrix_ortho3d_f32(-4, 4, -3, 3, 0.1, 100)
+
+        if wdata.click_present {
+            wdata.click_present = false
+
+            v := wdata.click_pos
+            pos4 := linalg.matrix4_inverse(matrix_view) * [4]f32{ ilerp(0, screen.x, v.x) * 8 - 4, ilerp(0, screen.y, v.y) * 6 - 3, 0, 1 }
+            pos := pos4.xy / pos4.w
+            pos.y = -pos.y // NOTE: not sure why this is needed
+
+            fmt.println(v)
+            fmt.println(pos)
+
+            col := cast(int)math.round(pos.x)
+            row := cast(int)math.round(pos.y)
+
+            tile, ok := grid_ref(ms_grid, col, row)
+            if ok {
+                tile.opened = !tile.opened
+
+                instance, _ := grid_ref(instances, col, row)
+                instance.opened = tile.opened ? 1 : 0
+
+                for tn in TileNeighbor {
+                    offset := neighborOffset(tn)
+                    updateLerps(ms_grid, col + offset.x, row + offset.y)
+                }
+            }
+        }
+
+
+
+
+        for y in 0..<ms_grid.rows {
+            for x in 0..<ms_grid.cols {
+                ms, _ := grid_get(ms_grid, x, y)
+                instance, _ := grid_get(instances, x, y)
+
+                if ms.lerpDeltas == {} { continue }
+
+                lerpsOld := instance.lerps
+                for l, i in ms.lerpDeltas {
+                    instance.lerps[i] = math.clamp(instance.lerps[i] + (l * time_delta), 0, 1)
+                }
+
+                if lerpsOld == instance.lerps {
+                    ms.lerpDeltas = {}
+                    continue
+                }
+
+                grid_set(instances, x, y, instance)
+            }
+        }
+        gl.NamedBufferData(buffer_instances, size_of(Shader_Instance) * len(instances.vals), raw_data(instances.vals), gl.STATIC_DRAW)
+
+        gl.Viewport(0, 0, cast(i32)screen.x, cast(i32)screen.y)
 
         gl.ClearColor(0.1, 0.2, 0.4, 1.0)
         gl.Clear(gl.COLOR_BUFFER_BIT)
@@ -222,16 +363,11 @@ main :: proc () {
 
         gl.UseProgram(program)
 
-
-        // NOTE: this is completely unnecessary, but it doesn't matter at all
-        matrix_view  := linalg.matrix4_look_at_f32({ 0.0, 0.0, 5.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 })
-        matrix_proj := linalg.matrix_ortho3d_f32(-4, 4, -3, 3, 0.1, 100)
-
-        gl.Uniform1f(0, 0)
+        gl.Uniform1f(0, time_passed)
         gl.UniformMatrix4fv(1, 1, gl.FALSE, cast(^f32)&matrix_view)
         gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_proj)
-        gl.Uniform1f(3, 0.45)
-        gl.Uniform1f(4, 0.2)
+        gl.Uniform1f(3, 0.4)
+        gl.Uniform1f(4, 0.3)
 
 
 
