@@ -6,6 +6,9 @@ import "core:math"
 import "core:math/rand"
 import "core:math/linalg"
 
+import img "core:image"
+import img_png "core:image/png"
+
 import myglfw "./glfw"
 
 import gl "vendor:OpenGL"
@@ -23,7 +26,7 @@ Shader_Instance :: struct {
     lerps : [Shader_Instance_Lerp]f32,
 
     opened : u32,
-    // digit : f32,
+    digit : u32,
 }
 
 // TODO: i think we do an extra lerp for corners when they are inverted
@@ -219,8 +222,11 @@ main :: proc () {
 
 
 
-    program, _ := gl.load_shaders_file("shaders-built/tile-vert.glsl", "shaders-built/tile-frag.glsl")
-    defer gl.DeleteProgram(program)
+    program_tile, _ := gl.load_shaders_file("shaders-built/tile-vert.glsl", "shaders-built/tile-frag.glsl")
+    defer gl.DeleteProgram(program_tile)
+
+    program_digit, _ := gl.load_shaders_file("shaders-built/digit-vert.glsl", "shaders-built/digit-frag.glsl")
+    defer gl.DeleteProgram(program_digit)
 
 
 
@@ -311,7 +317,8 @@ main :: proc () {
             m, _ := grid_ref(ms_grid, x, y)
             m.minesAround = mines
 
-            // fmt.println(mines)
+            instance, _ := grid_ref(instances, x, y)
+            instance.digit = cast(u32)mines
         }
     }
 
@@ -352,10 +359,41 @@ main :: proc () {
 
     fmt.println(align_of(Shader_Instance), size_of(Shader_Instance))
 
+
+
+
+
+    tex_digits : u32
+
+    gl.GenTextures(1, &tex_digits);
+    gl.BindTexture(gl.TEXTURE_2D, tex_digits);
+
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    img_digits, _ := img.load_from_file("digits.png")
+
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cast(i32)img_digits.width, cast(i32)img_digits.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(img_digits.pixels.buf));
+    gl.GenerateMipmap(gl.TEXTURE_2D);
+
+
+
+
+
+
+
+
+
+
+
     
     position : [3]f32 = { 0, 0, 5 }
     direction : [3]f32 = { 0, 0, -5 }
 
+    gl.Enable(gl.BLEND)
+    gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
     time_start := time.now()
     time_last := time.now()
@@ -443,7 +481,7 @@ main :: proc () {
 
 
 
-        gl.UseProgram(program)
+        gl.UseProgram(program_tile)
 
         gl.Uniform1f(0, time_passed)
         gl.UniformMatrix4fv(1, 1, gl.FALSE, cast(^f32)&matrix_view)
@@ -452,6 +490,23 @@ main :: proc () {
         gl.Uniform1f(4, 0.1)
 
 
+
+        gl.BindVertexArray(array_vertex)
+        gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, buffer_instances)
+        gl.DrawElementsInstanced(gl.TRIANGLES, cast(i32)len(indexes), gl.UNSIGNED_INT, nil, cast(i32)len(instances.vals))
+
+
+
+
+        gl.UseProgram(program_digit)
+
+        gl.Uniform1f(0, time_passed)
+        gl.UniformMatrix4fv(1, 1, gl.FALSE, cast(^f32)&matrix_view)
+        gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_proj)
+
+        gl.ActiveTexture(gl.TEXTURE0)
+        gl.BindTexture(gl.TEXTURE_2D, tex_digits)
+        gl.Uniform1i(3, gl.TEXTURE0)
 
         gl.BindVertexArray(array_vertex)
         gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, buffer_instances)
