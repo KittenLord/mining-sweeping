@@ -16,11 +16,13 @@ struct Instance {
     float lerp_NEI;
     float lerp_SWI;
     float lerp_SEI;
+    float lerp_Transparency;
+    float lerp_Scale;
 
     uint opened;
 
     uint paddingA[1];
-    uint paddingB[2];
+    // uint paddingB[0];
 };
 
 layout(binding = 0) buffer buffer_instances {
@@ -48,11 +50,9 @@ float dist2(vec2 a, vec2 b) {
 
 void main() {
     Instance instance = instances[in_instanceId];
-    
-    if(instance.opened == 1) {
-        out_color = vec4(0.9, 0.9, 0.9, 1.0);
-        return;
-    }
+
+    vec3 color = mix(vec3(0.4, 0.4, 0.4), vec3(0.9, 0.9, 0.9), instance.lerp_Transparency);
+
 
     float bound_NN = -mix(deco_size, deco_offset, instance.lerp_NN);
     float bound_SS =  mix(deco_size, deco_offset, instance.lerp_SS);
@@ -111,5 +111,5 @@ void main() {
 
 
 
-    out_color = vec4(0.4, 0.4, 0.4, 1.0);
+    out_color = vec4(color, 1.0);
 }

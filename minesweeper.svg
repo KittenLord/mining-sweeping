@@ -23,9 +23,9 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
-     inkscape:zoom="2.8284271"
-     inkscape:cx="603.51564"
-     inkscape:cy="1010.2788"
+     inkscape:zoom="7.9999999"
+     inkscape:cx="434.50001"
+     inkscape:cy="862.06251"
      inkscape:window-width="1920"
      inkscape:window-height="1046"
      inkscape:window-x="0"
@@ -2273,5 +2273,39 @@
        x="185.3334"
        y="268.48999"
        ry="0.85989583" />
+    <rect
+       style="fill:#666666;stroke-width:0.539191"
+       id="rect10-8-5-3"
+       width="20.814392"
+       height="5.0118971"
+       x="101.48809"
+       y="228.86458" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:3.175px;font-family:'Cascadia Code';-inkscape-font-specification:'Cascadia Code, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;writing-mode:lr-tb;direction:ltr;fill:#ececec;stroke-width:0.264583"
+       x="103.33205"
+       y="232.46239"
+       id="text9-8-5"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         x="103.33205"
+         y="232.46239">12345678</tspan></text>
+    <rect
+       style="fill:#666666;stroke-width:0.625384"
+       id="rect10-8-5-3-5"
+       width="28.00091"
+       height="5.0118971"
+       x="102.22268"
+       y="235.25487" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:3.175px;font-family:'Noto Serif Hentaigana';-inkscape-font-specification:'Noto Serif Hentaigana, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;writing-mode:lr-tb;direction:ltr;fill:#ececec;stroke-width:0.264583"
+       x="104.06664"
+       y="238.85268"
+       id="text9-8-5-7"><tspan
+         sodipodi:role="line"
+         id="tspan2"
+         x="104.06664"
+         y="238.85268">一二三四五六七八</tspan></text>
   </g>
 </svg>

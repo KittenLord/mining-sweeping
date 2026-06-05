@@ -16,11 +16,13 @@ struct Instance {
     float lerp_NEI;
     float lerp_SWI;
     float lerp_SEI;
+    float lerp_Transparency;
+    float lerp_Scale;
 
     uint opened;
 
     uint paddingA[1];
-    uint paddingB[2];
+    // uint paddingB[0];
 };
 
 layout(binding = 0) buffer buffer_instances {
@@ -41,7 +43,7 @@ layout(location = 1) out vec3 out_position;
 void main() {
     Instance instance = instances[gl_InstanceID];
 
-    gl_Position = proj * view * instance.model * vec4(in_position, 1.0);
+    gl_Position = proj * view * instance.model * vec4(in_position * mix(1, 0, instance.lerp_Scale), 1.0);
     out_instanceId = gl_InstanceID;
     out_position = in_position;
 }

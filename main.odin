@@ -1,9 +1,10 @@
 package main
 
 import "core:fmt"
-import "core:math/linalg"
-import "core:math"
 import "core:time"
+import "core:math"
+import "core:math/rand"
+import "core:math/linalg"
 
 import myglfw "./glfw"
 
@@ -22,6 +23,7 @@ Shader_Instance :: struct {
     lerps : [Shader_Instance_Lerp]f32,
 
     opened : u32,
+    // digit : f32,
 }
 
 // TODO: i think we do an extra lerp for corners when they are inverted
@@ -39,10 +41,15 @@ Shader_Instance_Lerp :: enum {
     NEI,
     SWI,
     SEI,
+
+    Transparency,
+    Scale,
 }
 
 Tile :: struct {
     opened : bool,
+    mine   : bool,
+    minesAround : int,
 
     lerpDeltas : [Shader_Instance_Lerp]f32,
 }
@@ -69,6 +76,13 @@ neighborOffset :: proc(n : TileNeighbor) -> [2]int {
     case .SW: return { -1,  1 }
     case .WW: return { -1,  0 }
     case: panic("bad")
+    }
+}
+
+mergeLerps :: proc(old, new : ^[Shader_Instance_Lerp]f32) {
+    for &l, i in old {
+        if new[i] == 0 { continue }
+        l = new[i]
     }
 }
 
@@ -110,7 +124,7 @@ updateLerps :: proc(grid : Grid(Tile), col, row : int) {
     newLerpDeltas[.SEI] = present[.EE] && present[.SS] && !present[.SE] ? 1 : -1
     newLerpDeltas[.SWI] = present[.SS] && present[.WW] && !present[.SW] ? 1 : -1
 
-    n.lerpDeltas = newLerpDeltas
+    mergeLerps(&n.lerpDeltas, &newLerpDeltas)
     grid_set(grid, col, row, n)
 }
 
@@ -148,6 +162,31 @@ grid_ref :: proc(grid : Grid($ty), col, row : int) -> (ref : ^ty, ok : bool = fa
     return &grid.vals[row * grid.cols + col], true
 }
 
+minesweeper_uncover :: proc(grid : Grid(Tile), instances : Grid(Shader_Instance), col, row : int) {
+    tile, ok := grid_ref(grid, col, row)
+    if !ok { return }
+
+    if tile.opened { return }
+    tile.opened = true
+
+    tile.lerpDeltas[.Transparency] = 1
+    tile.lerpDeltas[.Scale]        = 1
+
+    instance, _ := grid_ref(instances, col, row)
+    instance.opened = 1
+
+    for tn in TileNeighbor {
+        offset := neighborOffset(tn)
+
+        if tile.minesAround == 0 {
+            minesweeper_uncover(grid, instances, col + offset.x, row + offset.y)
+        }
+        else {
+            updateLerps(grid, col + offset.x, row + offset.y)
+        }
+    }
+}
+
 ilerp :: proc(a, b, v : f32) -> f32 {
     return (v - a) / (b - a)
 }
@@ -180,7 +219,7 @@ main :: proc () {
 
 
 
-    program, _ := gl.load_shaders_file("shaders/vertex.glsl", "shaders/fragment.glsl")
+    program, _ := gl.load_shaders_file("shaders/tile-vert.glsl", "shaders/tile-frag.glsl")
     defer gl.DeleteProgram(program)
 
 
@@ -238,29 +277,41 @@ main :: proc () {
 
 
 
-    ms_grid := grid_make(Tile, 10, 10)
-    instances := grid_make(Shader_Instance, 10, 10)
-
-    grid_set(ms_grid, 1, 1, Tile{ false, {} })
+    ms_grid := grid_make(Tile, 100, 100)
+    instances := grid_make(Shader_Instance, 100, 100)
 
     for y in 0..<ms_grid.rows {
         for x in 0..<ms_grid.cols {
             ms, _ := grid_get(ms_grid, x, y)
+
+            ms.mine = rand.float32() < 0.15
+
             instance : Shader_Instance = {
                 model = linalg.matrix4_translate_f32({ 0.0 + cast(f32)x, 0.0 + cast(f32)y, 0.0 }),
-                // model = linalg.MATRIX4F32_IDENTITY,
-
-
                 opened = ms.opened ? 1 : 0,
             }
 
-            if(ms.opened) {
-                for &v in instance.lerps {
-                    v = 1
+            grid_set(ms_grid, x, y, ms)
+            grid_set(instances, x, y, instance)
+        }
+    }
+
+    for y in 0..<ms_grid.rows {
+        for x in 0..<ms_grid.cols {
+            mines := 0
+            for tn in TileNeighbor {
+                offset := neighborOffset(tn)
+                n, ok := grid_get(ms_grid, x + offset.x, y + offset.y)
+
+                if ok && n.mine {
+                    mines += 1
                 }
             }
 
-            grid_set(instances, x, y, instance)
+            m, _ := grid_ref(ms_grid, x, y)
+            m.minesAround = mines
+
+            fmt.println(mines)
         }
     }
 
@@ -270,6 +321,7 @@ main :: proc () {
     WindowData :: struct {
         click_present : bool,
         click_pos : [2]f32,
+        scrolls : [2]f32,
     }
 
     wdata : WindowData = {
@@ -285,6 +337,11 @@ main :: proc () {
 
         wdata.click_present = true
         wdata.click_pos = myglfw.GetCursorPosf32(window)
+    })
+
+    glfw.SetScrollCallback(window, proc "c" (window : glfw.WindowHandle, x, y : f64) {
+        wdata := cast(^WindowData)glfw.GetWindowUserPointer(window)
+        wdata.scrolls += { cast(f32)x, cast(f32)y }
     })
 
 
@@ -324,12 +381,17 @@ main :: proc () {
         position += { -1, 0, 0 } * myglfw.IsKeyPressed_f32(window, .LetterA) * time_delta * moveSpeed
         position += {  1, 0, 0 } * myglfw.IsKeyPressed_f32(window, .LetterD) * time_delta * moveSpeed
 
+        position += { 0, 0, -1 } * wdata.scrolls.y * 0.2
+        wdata.scrolls = {}
+
+
+
 
 
 
 
         // NOTE: this is completely unnecessary, but it doesn't matter at all
-        matrix_view  := linalg.matrix4_look_at_f32(position, position + direction, { 0.0, 1.0, 0.0 })
+        matrix_view  := linalg.matrix4_scale_f32({ 1 / position.z, 1 / position.z, 1 / position.z }) * linalg.matrix4_look_at_f32(position, position + direction, { 0.0, 1.0, 0.0 })
         matrix_proj  := linalg.matrix_ortho3d_f32(-4, 4, -3, 3, 0.1, 100)
 
         if wdata.click_present {
@@ -345,20 +407,8 @@ main :: proc () {
 
             col := cast(int)math.round(pos.x)
             row := cast(int)math.round(pos.y)
-            // row = -row // NOTE: not sure why this is needed
 
-            tile, ok := grid_ref(ms_grid, col, row)
-            if ok {
-                tile.opened = !tile.opened
-
-                instance, _ := grid_ref(instances, col, row)
-                instance.opened = tile.opened ? 1 : 0
-
-                for tn in TileNeighbor {
-                    offset := neighborOffset(tn)
-                    updateLerps(ms_grid, col + offset.x, row + offset.y)
-                }
-            }
+            minesweeper_uncover(ms_grid, instances, col, row)
         }
 
 
@@ -398,8 +448,8 @@ main :: proc () {
         gl.Uniform1f(0, time_passed)
         gl.UniformMatrix4fv(1, 1, gl.FALSE, cast(^f32)&matrix_view)
         gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_proj)
-        gl.Uniform1f(3, 0.3)
-        gl.Uniform1f(4, 0.3)
+        gl.Uniform1f(3, 0.4)
+        gl.Uniform1f(4, 0.1)
 
 
 
