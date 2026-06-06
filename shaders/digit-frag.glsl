@@ -32,5 +32,5 @@ void main() {
 
     vec4 col = texture(tex, texCoord);
 
-    out_color = vec4(col.r, 0, 0, col.a);
+    out_color = vec4(col.r * vec3(1.0, 0.0, 0.0), col.a);
 }

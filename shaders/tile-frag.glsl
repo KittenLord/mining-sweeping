@@ -29,7 +29,9 @@ float dist2(vec2 a, vec2 b) {
 void main() {
     Instance instance = instances[in_instanceId];
 
-    vec3 color = mix(vec3(0.4, 0.4, 0.4), vec3(0.9, 0.9, 0.9), instance.lerp_Transparency);
+    // TODO: we want some flag appearing animation thingy (at least a flag icon transparently appearing)
+    vec3 color = mix(vec3(0.4, 0.4, 0.4), vec3(0.2, 0.7, 0.2), instance.lerp_Flag);
+    float alpha = mix(1, 0, instance.lerp_Transparency);
 
 
     float bound_NN = -mix(deco_size, deco_offset, instance.lerp_NN);
@@ -89,5 +91,5 @@ void main() {
 
 
 
-    out_color = vec4(color, 1.0);
+    out_color = vec4(color, alpha);
 }

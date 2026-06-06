@@ -15,10 +15,11 @@ struct Instance {
     float lerp_SEI;
     float lerp_Transparency;
     float lerp_Scale;
+    float lerp_Flag;
 
     uint opened;
     uint digit;
 
-    //uint paddingA[1];
-    // uint paddingB[0];
+    uint paddingA[1];
+    uint paddingB[4];
 };

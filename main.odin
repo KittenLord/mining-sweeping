@@ -47,11 +47,13 @@ Shader_Instance_Lerp :: enum {
 
     Transparency,
     Scale,
+    Flag,
 }
 
 Tile :: struct {
     opened : bool,
     mine   : bool,
+    flag   : bool,
     minesAround : int,
 
     lerpDeltas : [Shader_Instance_Lerp]f32,
@@ -103,13 +105,11 @@ updateLerps :: proc(grid : Grid(Tile), col, row : int) {
         opened : bool
 
         if !ok {
-            opened = true
+            present[tn] = false
         }
         else {
-            opened = nn.opened
+            present[tn] = (nn.opened == n.opened) && (nn.flag == n.flag)
         }
-
-        present[tn] = !opened
     }
 
     newLerpDeltas[.NW] = (!present[.WW] && !present[.NN]) ? 1 : -1
@@ -170,7 +170,9 @@ minesweeper_uncover :: proc(grid : Grid(Tile), instances : Grid(Shader_Instance)
     if !ok { return }
 
     if tile.opened { return }
+    if tile.mine { return }
     tile.opened = true
+    tile.flag = false
 
     tile.lerpDeltas[.Transparency] = 1
     tile.lerpDeltas[.Scale]        = 1
@@ -187,6 +189,22 @@ minesweeper_uncover :: proc(grid : Grid(Tile), instances : Grid(Shader_Instance)
         else {
             updateLerps(grid, col + offset.x, row + offset.y)
         }
+    }
+}
+
+minesweeper_flag :: proc(grid : Grid(Tile), instances : Grid(Shader_Instance), col, row : int) {
+    tile, ok := grid_ref(grid, col, row)
+    if !ok { return }
+
+    if tile.opened { return }
+
+    tile.flag = !tile.flag
+    tile.lerpDeltas[.Flag] = tile.flag ? 1 : -1
+    updateLerps(grid, col, row)
+
+    for tn in TileNeighbor {
+        offset := neighborOffset(tn)
+        updateLerps(grid, col + offset.x, row + offset.y)
     }
 }
 
@@ -328,6 +346,8 @@ main :: proc () {
     WindowData :: struct {
         click_present : bool,
         click_pos : [2]f32,
+        click_uncover : bool,
+
         scrolls : [2]f32,
     }
 
@@ -344,6 +364,7 @@ main :: proc () {
 
         wdata.click_present = true
         wdata.click_pos = myglfw.GetCursorPosf32(window)
+        wdata.click_uncover = button == .Left
     })
 
     glfw.SetScrollCallback(window, proc "c" (window : glfw.WindowHandle, x, y : f64) {
@@ -446,7 +467,13 @@ main :: proc () {
             col := cast(int)math.round(pos.x)
             row := cast(int)math.round(pos.y)
 
-            minesweeper_uncover(ms_grid, instances, col, row)
+            if wdata.click_uncover {
+                minesweeper_uncover(ms_grid, instances, col, row)
+            }
+            else {
+                // TODO: flag
+                minesweeper_flag(ms_grid, instances, col, row)
+            }
         }
 
 
@@ -486,8 +513,8 @@ main :: proc () {
         gl.Uniform1f(0, time_passed)
         gl.UniformMatrix4fv(1, 1, gl.FALSE, cast(^f32)&matrix_view)
         gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_proj)
-        gl.Uniform1f(3, 0.4)
-        gl.Uniform1f(4, 0.1)
+        gl.Uniform1f(3, 0.42)
+        gl.Uniform1f(4, 0.08)
 
 
 
