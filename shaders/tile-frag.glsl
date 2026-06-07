@@ -2,6 +2,7 @@
 #pragma shader_stage(fragment)
 
 #include "tile.glslh"
+#include "easings.glslh"
 
 layout(binding = 0) buffer buffer_instances {
     Instance instances[];
@@ -10,8 +11,14 @@ layout(binding = 0) buffer buffer_instances {
 layout(location = 0) uniform float time;
 layout(location = 1) uniform mat4 view;
 layout(location = 2) uniform mat4 proj;
-layout(location = 3) uniform float deco_offset;
-layout(location = 4) uniform float deco_radius;
+layout(location = 3) uniform sampler2D tex;
+layout(location = 4) uniform float deco_offset;
+layout(location = 5) uniform float deco_radius;
+
+layout(location = 6) uniform vec3 color_closed;
+layout(location = 7) uniform vec3 color_opened;
+layout(location = 8) uniform vec3 color_flag;
+layout(location = 9) uniform vec3 color_digit;
 
 const float ISQRT2 = 1.0 / sqrt(2.0);
 
@@ -26,18 +33,20 @@ float dist2(vec2 a, vec2 b) {
     return dot(a - b, a - b);
 }
 
+#define EASE_NEIGHBORS(x) ease_sin_o(x)
+
 void main() {
     Instance instance = instances[in_instanceId];
 
     // TODO: we want some flag appearing animation thingy (at least a flag icon transparently appearing)
-    vec3 color = mix(vec3(0.4, 0.4, 0.4), vec3(0.2, 0.7, 0.2), instance.lerp_Flag);
-    float alpha = mix(1, 0, instance.lerp_Transparency);
+    vec3 color = mix(color_closed, color_flag, EASE_NEIGHBORS(instance.lerp_Flag));
+    float alpha = mix(1, 0, EASE_NEIGHBORS(instance.lerp_Transparency));
 
 
-    float bound_NN = -mix(deco_size, deco_offset, instance.lerp_NN);
-    float bound_SS =  mix(deco_size, deco_offset, instance.lerp_SS);
-    float bound_WW = -mix(deco_size, deco_offset, instance.lerp_WW);
-    float bound_EE =  mix(deco_size, deco_offset, instance.lerp_EE);
+    float bound_NN = -mix(deco_size, deco_offset, EASE_NEIGHBORS(instance.lerp_NN));
+    float bound_SS =  mix(deco_size, deco_offset, EASE_NEIGHBORS(instance.lerp_SS));
+    float bound_WW = -mix(deco_size, deco_offset, EASE_NEIGHBORS(instance.lerp_WW));
+    float bound_EE =  mix(deco_size, deco_offset, EASE_NEIGHBORS(instance.lerp_EE));
 
     if(in_position.y < bound_NN) {
         discard;
@@ -53,7 +62,7 @@ void main() {
     }
 
 #define EVALUATE_CENTER(a, b, as, bs) \
-    float radius_##a##b = mix(0, deco_radius, instance.lerp_##a##b); \
+    float radius_##a##b = mix(0, deco_radius, EASE_NEIGHBORS(instance.lerp_##a##b)); \
     vec2 center_##a##b = vec2(bound_##b##b, bound_##a##a) + vec2(as * radius_##a##b, bs * radius_##a##b);
 
     EVALUATE_CENTER(N, W, 1, 1);
@@ -79,7 +88,7 @@ void main() {
     }
 
 #define CHECK_IRADIUS(a, b, as, bs) \
-    float iradius_##a##b = mix(0, (deco_size - deco_offset), instance.lerp_##a##b##I); \
+    float iradius_##a##b = mix(0, (deco_size - deco_offset), EASE_NEIGHBORS(instance.lerp_##a##b##I)); \
     if(dist2(vec2(as * deco_size, bs * deco_size), in_position.xy) < iradius_##a##b * iradius_##a##b) { \
         discard; \
     }

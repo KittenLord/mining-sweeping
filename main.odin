@@ -14,6 +14,16 @@ import myglfw "./glfw"
 import gl "vendor:OpenGL"
 import glfw "vendor:glfw"
 
+COLOR_CLOSED :: [3]f32 { 0.36, 0.86, 0.68 }
+COLOR_OPENED :: [3]f32 { 0.32, 0.32, 0.32 }
+COLOR_FLAG   :: [3]f32 { 0.15, 0.15, 0.15 }
+COLOR_DIGIT  :: [3]f32 { 0.90, 0.90, 0.90 }
+
+LERP_SPEED_NEIGHBORS : f32 : 2
+LERP_SPEED_INNER_CORNERS : f32 : 2
+LERP_SPEED_UNCOVER : f32 : 2
+LERP_SPEED_FLAG : f32 : 4
+
 Shader_Vertex :: struct {
     pos : [3]f32,
 }
@@ -112,20 +122,23 @@ updateLerps :: proc(grid : Grid(Tile), col, row : int) {
         }
     }
 
-    newLerpDeltas[.NW] = (!present[.WW] && !present[.NN]) ? 1 : -1
-    newLerpDeltas[.NE] = (!present[.NN] && !present[.EE]) ? 1 : -1
-    newLerpDeltas[.SE] = (!present[.EE] && !present[.SS]) ? 1 : -1
-    newLerpDeltas[.SW] = (!present[.SS] && !present[.WW]) ? 1 : -1
+    s : f32 = LERP_SPEED_NEIGHBORS
+    v : f32 = LERP_SPEED_INNER_CORNERS
 
-    newLerpDeltas[.NN] = !present[.NN] ? 1 : -1
-    newLerpDeltas[.EE] = !present[.EE] ? 1 : -1
-    newLerpDeltas[.SS] = !present[.SS] ? 1 : -1
-    newLerpDeltas[.WW] = !present[.WW] ? 1 : -1
+    newLerpDeltas[.NW] = (!present[.WW] && !present[.NN]) ? s : -s
+    newLerpDeltas[.NE] = (!present[.NN] && !present[.EE]) ? s : -s
+    newLerpDeltas[.SE] = (!present[.EE] && !present[.SS]) ? s : -s
+    newLerpDeltas[.SW] = (!present[.SS] && !present[.WW]) ? s : -s
 
-    newLerpDeltas[.NWI] = present[.WW] && present[.NN] && !present[.NW] ? 1 : -1
-    newLerpDeltas[.NEI] = present[.NN] && present[.EE] && !present[.NE] ? 1 : -1
-    newLerpDeltas[.SEI] = present[.EE] && present[.SS] && !present[.SE] ? 1 : -1
-    newLerpDeltas[.SWI] = present[.SS] && present[.WW] && !present[.SW] ? 1 : -1
+    newLerpDeltas[.NN] = !present[.NN] ? s : -s
+    newLerpDeltas[.EE] = !present[.EE] ? s : -s
+    newLerpDeltas[.SS] = !present[.SS] ? s : -s
+    newLerpDeltas[.WW] = !present[.WW] ? s : -s
+
+    newLerpDeltas[.NWI] = present[.WW] && present[.NN] && !present[.NW] ? v : -v
+    newLerpDeltas[.NEI] = present[.NN] && present[.EE] && !present[.NE] ? v : -v
+    newLerpDeltas[.SEI] = present[.EE] && present[.SS] && !present[.SE] ? v : -v
+    newLerpDeltas[.SWI] = present[.SS] && present[.WW] && !present[.SW] ? v : -v
 
     mergeLerps(&n.lerpDeltas, &newLerpDeltas)
     grid_set(grid, col, row, n)
@@ -170,12 +183,18 @@ minesweeper_uncover :: proc(grid : Grid(Tile), instances : Grid(Shader_Instance)
     if !ok { return }
 
     if tile.opened { return }
-    if tile.mine { return }
+    if tile.mine {
+        // TODO: initiate game over sequence
+        return
+    }
+
     tile.opened = true
     tile.flag = false
 
-    tile.lerpDeltas[.Transparency] = 1
-    tile.lerpDeltas[.Scale]        = 1
+    s : f32 = LERP_SPEED_UNCOVER
+
+    tile.lerpDeltas[.Transparency] = s
+    tile.lerpDeltas[.Scale]        = s
 
     instance, _ := grid_ref(instances, col, row)
     instance.opened = 1
@@ -198,13 +217,49 @@ minesweeper_flag :: proc(grid : Grid(Tile), instances : Grid(Shader_Instance), c
 
     if tile.opened { return }
 
+    s : f32 = LERP_SPEED_FLAG
+
     tile.flag = !tile.flag
-    tile.lerpDeltas[.Flag] = tile.flag ? 1 : -1
+    tile.lerpDeltas[.Flag] = tile.flag ? s : -s
     updateLerps(grid, col, row)
 
     for tn in TileNeighbor {
         offset := neighborOffset(tn)
         updateLerps(grid, col + offset.x, row + offset.y)
+    }
+}
+
+minesweeper_chord :: proc(grid : Grid(Tile), instances : Grid(Shader_Instance), col, row : int) {
+    this, ok := grid_get(grid, col, row)
+    if !ok { return }
+    if !this.opened { return }
+
+    unflaggedMines := 0
+    flaggedMines := 0
+
+    for tn in TileNeighbor {
+        offset := neighborOffset(tn)
+        n := grid_get(grid, col + offset.x, row + offset.y) or_continue
+
+        if n.flag { flaggedMines += 1 }
+        if !n.flag && n.mine { unflaggedMines += 1 }
+    }
+
+    // TODO: I've seen some people arguing that this should uncover all unflagged neighbors,
+    // so that the player isn't incentivized to delegate flag counting to the game itself.
+    // We might want to have this, but generally that's not how it works
+    if flaggedMines != this.minesAround {
+        return
+    }
+
+    if unflaggedMines > 0 {
+        // TODO: initiate game over sequence
+        return
+    }
+
+    for tn in TileNeighbor {
+        offset := neighborOffset(tn)
+        minesweeper_uncover(grid, instances, col + offset.x, row + offset.y)
     }
 }
 
@@ -384,19 +439,19 @@ main :: proc () {
 
 
 
-    tex_digits : u32
+    tex_tiles : u32
 
-    gl.GenTextures(1, &tex_digits);
-    gl.BindTexture(gl.TEXTURE_2D, tex_digits);
+    gl.GenTextures(1, &tex_tiles);
+    gl.BindTexture(gl.TEXTURE_2D, tex_tiles);
 
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    img_digits, _ := img.load_from_file("digits.png")
+    img_tiles, _ := img.load_from_file("tiles.png")
 
-    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cast(i32)img_digits.width, cast(i32)img_digits.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(img_digits.pixels.buf));
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cast(i32)img_tiles.width, cast(i32)img_tiles.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(img_tiles.pixels.buf));
     gl.GenerateMipmap(gl.TEXTURE_2D);
 
 
@@ -467,12 +522,18 @@ main :: proc () {
             col := cast(int)math.round(pos.x)
             row := cast(int)math.round(pos.y)
 
-            if wdata.click_uncover {
-                minesweeper_uncover(ms_grid, instances, col, row)
-            }
-            else {
-                // TODO: flag
-                minesweeper_flag(ms_grid, instances, col, row)
+            tile, ok := grid_get(ms_grid, col, row)
+            if ok {
+                if wdata.click_uncover && tile.opened {
+                    minesweeper_chord(ms_grid, instances, col, row)
+                }
+                else if wdata.click_uncover {
+                    minesweeper_uncover(ms_grid, instances, col, row)
+                }
+                else {
+                    // TODO: flag
+                    minesweeper_flag(ms_grid, instances, col, row)
+                }
             }
         }
 
@@ -503,7 +564,7 @@ main :: proc () {
 
         gl.Viewport(0, 0, cast(i32)screen.x, cast(i32)screen.y)
 
-        gl.ClearColor(0.9, 0.9, 0.9, 1.0)
+        gl.ClearColor(COLOR_OPENED.x, COLOR_OPENED.y, COLOR_OPENED.z, 1.0)
         gl.Clear(gl.COLOR_BUFFER_BIT)
 
 
@@ -513,8 +574,18 @@ main :: proc () {
         gl.Uniform1f(0, time_passed)
         gl.UniformMatrix4fv(1, 1, gl.FALSE, cast(^f32)&matrix_view)
         gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_proj)
-        gl.Uniform1f(3, 0.42)
-        gl.Uniform1f(4, 0.08)
+
+        gl.ActiveTexture(gl.TEXTURE0)
+        gl.BindTexture(gl.TEXTURE_2D, tex_tiles)
+        gl.Uniform1i(3, gl.TEXTURE0)
+
+        gl.Uniform1f(4, 0.45)
+        gl.Uniform1f(5, 0.05)
+
+        gl.Uniform3f(6, COLOR_CLOSED.x, COLOR_CLOSED.y, COLOR_CLOSED.z)
+        gl.Uniform3f(7, COLOR_OPENED.x, COLOR_OPENED.y, COLOR_OPENED.z) // NOTE: not actually used in shaders
+        gl.Uniform3f(8, COLOR_FLAG.x,   COLOR_FLAG.y,   COLOR_FLAG.z)
+        gl.Uniform3f(9, COLOR_DIGIT.x,  COLOR_DIGIT.y,  COLOR_DIGIT.z)
 
 
 
@@ -532,8 +603,13 @@ main :: proc () {
         gl.UniformMatrix4fv(2, 1, gl.FALSE, cast(^f32)&matrix_proj)
 
         gl.ActiveTexture(gl.TEXTURE0)
-        gl.BindTexture(gl.TEXTURE_2D, tex_digits)
+        gl.BindTexture(gl.TEXTURE_2D, tex_tiles)
         gl.Uniform1i(3, gl.TEXTURE0)
+
+        gl.Uniform3f(6, COLOR_CLOSED.x, COLOR_CLOSED.y, COLOR_CLOSED.z)
+        gl.Uniform3f(7, COLOR_OPENED.x, COLOR_OPENED.y, COLOR_OPENED.z) // NOTE: not actually used in shaders
+        gl.Uniform3f(8, COLOR_FLAG.x,   COLOR_FLAG.y,   COLOR_FLAG.z)
+        gl.Uniform3f(9, COLOR_DIGIT.x,  COLOR_DIGIT.y,  COLOR_DIGIT.z)
 
         gl.BindVertexArray(array_vertex)
         gl.BindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, buffer_instances)

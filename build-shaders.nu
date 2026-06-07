@@ -4,7 +4,8 @@
 
 mkdir shaders-built
 
-let include_tile = (open shaders/tile.glslh --raw)
+let include_tile    = (open shaders/tile.glslh --raw)
+let include_easings = (open shaders/easings.glslh --raw)
 
 ls shaders
 | where type == file
@@ -13,6 +14,7 @@ ls shaders
     let content = (
         open $file.name --raw
         | str replace '#include "tile.glslh"' $include_tile
+        | str replace '#include "easings.glslh"' $include_easings
     )
 
     let out_path = (
