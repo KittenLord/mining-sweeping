@@ -495,7 +495,13 @@ main :: proc () {
         position += { -1, 0, 0 } * myglfw.IsKeyPressed_f32(window, .LetterA) * time_delta * moveSpeed
         position += {  1, 0, 0 } * myglfw.IsKeyPressed_f32(window, .LetterD) * time_delta * moveSpeed
 
-        position += { 0, 0, -1 } * wdata.scrolls.y * 0.2
+        position += { 0, 0, -1 } * wdata.scrolls.y * 0.1
+
+        // TODO: it might be useful to change zoom limits depending on screen aspect ratio or smth
+        max_zoom_in  :: 1
+        max_zoom_out :: 100
+        position.z = math.clamp(position.z, max_zoom_in, max_zoom_out)
+
         wdata.scrolls = {}
 
 
@@ -505,7 +511,7 @@ main :: proc () {
 
 
         // NOTE: this is completely unnecessary, but it doesn't matter at all
-        matrix_view  := linalg.matrix4_scale_f32({ 1 / position.z, 1 / position.z, 1 / position.z }) * linalg.matrix4_look_at_f32(position, position + direction, { 0.0, 1.0, 0.0 })
+        matrix_view  := linalg.matrix4_scale_f32({ 1, 1, 1 } / position.z) * linalg.matrix4_look_at_f32(position, position + direction, { 0.0, 1.0, 0.0 })
         matrix_proj  := linalg.matrix_ortho3d_f32(-4, 4, -3, 3, 0.1, 100)
 
         if wdata.click_present {
